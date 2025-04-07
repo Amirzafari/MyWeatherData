@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Data Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            margin: 10px 0;
+            color: black; /* Set the title color to black */
+        }
+        .charts {
+            display: flex;
+            flex: 1;
+            justify-content: space-around;
+            align-items: center;
+        }
+        .chart {
+            width: 45%;
+            height: 90%;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Weather Data Visualization</h1>
+        <div class="charts">
+            <div id="temperature-chart" class="chart"></div>
+            <div id="humidity-chart" class="chart"></div>
+        </div>
+    </div>
+
+    <script>
+        // Fetch data from API
+        d3.json('/api/weather_data').then(data => {
+            // Process data
+            const cities = [...new Set(data.map(d => d.city_name))];
+            const parseDate = d3.timeParse("%Y-%m-%d");
+            data = data.filter(d => {
+                d.date = parseDate(d.date);
+                d.temperature = +d.temperature;
+                d.humidity = +d.humidity;
+                return d.date && !isNaN(d.temperature) && !isNaN(d.humidity);
+            });
+
+            // Temperature Chart
+            createLineChart('#temperature-chart', data, 'Temperature (°C)', d => d.temperature, '°C');
+
+            // Humidity Chart
+            createLineChart('#humidity-chart', data, 'Humidity (%)', d => d.humidity, '%');
+
+            function createLineChart(selector, data, title, yValue, yUnit) {
+                const chart = d3.select(selector);
+                const width = chart.node().getBoundingClientRect().width;
+                const height = chart.node().getBoundingClientRect().height;
+                const margin = {top: 40, right: 150, bottom: 50, left: 60};  // Increased right margin for legend
+                const innerWidth = width - margin.left - margin.right;
+                const innerHeight = height - margin.top - margin.bottom;
+
+                const svg = chart.append("svg")
+                    .attr("width", width)
+                    .attr("height", height)
+                    .append("g")
+                    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+                const x = d3.scaleTime().range([0, innerWidth]);
+                const y = d3.scaleLinear().range([innerHeight, 0]);
+                const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+                x.domain(d3.extent(data, d => d.date));
+                y.domain([0, d3.max(data, yValue)]);
+
+                const line = d3.line()
+                    .x(d => x(d.date))
+                    .y(d => y(yValue(d)))
+                    .defined(d => !isNaN(x(d.date)) && !isNaN(y(yValue(d))));
+
+                cities.forEach(city => {
+                    const cityData = data.filter(d => d.city_name === city);
+                    svg.append("path")
+                        .datum(cityData)
+                        .attr("fill", "none")
+                        .attr("stroke", color(city))
+                        .attr("stroke-width", 1.5)
+                        .attr("d", line);
+                });
+
+                svg.append("g")
+                    .attr("transform", `translate(0,${innerHeight})`)
+                    .call(d3.axisBottom(x).tickFormat(d3.timeFormat("%b %d")));
+
+                svg.append("g")
+                    .call(d3.axisLeft(y));
+
+                svg.append("text")
+                    .attr("x", innerWidth / 2)
+                    .attr("y", -margin.top / 2)
+                    .attr("text-anchor", "middle")
+                    .style("font-size", "16px")
+                    .style("fill", "black")  // Set title color to black
+                    .text(title);
+
+                // Add legend
+                const legend = svg.selectAll(".legend")
+                    .data(cities)
+                    .enter().append("g")
+                    .attr("class", "legend")
+                    .attr("transform", (d, i) => `translate(0,${i * 25})`);  // Increase vertical spacing
+
+                legend.append("rect")
+                    .attr("x", innerWidth + 20)  // Adjust position
+                    .attr("width", 18)
+                    .attr("height", 18)
+                    .style("fill", color);
+
+                legend.append("text")
+                    .attr("x", innerWidth + 45)  // Adjust position to move text beside the color block
+                    .attr("y", 9)
+                    .attr("dy", ".35em")
+                    .style("text-anchor", "start")
+                    .text(d => d);
+            }
+        });
+    </script>
+</body>
+</html>
